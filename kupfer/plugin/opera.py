@@ -13,11 +13,17 @@ __kupfer_name__ = _("Opera Bookmarks")
 __kupfer_sources__ = ("BookmarksSource", )
 __kupfer_contents__ = ("BookmarksSource", )
 __description__ = _("Index of Opera bookmarks")
-__version__ = "0.1"
+__version__ = "0.2"
 __author__ = "Karol Będkowski <karol.bedkowski@gmail.com>"
 
 __kupfer_settings__ = plugin_support.PluginSettings(
-		plugin_support.SETTING_PREFER_CATALOG,
+	plugin_support.SETTING_PREFER_CATALOG,
+	{
+		"key" : "profile_dir",
+		"label": _("Personal configuration directory"),
+		"type": str,
+		"value": "~/.opera",
+	},
 )
 
 BOOKMARKS_FILE = "bookmarks.adr"
@@ -31,9 +37,9 @@ class BookmarksSource(AppLeafContentMixin, Source, PicklingHelperMixin,
 		self.unpickle_finish()
 
 	def unpickle_finish(self):
-		self._opera_home = os.path.expanduser("~/.opera/")
-		self._bookmarks_path = os.path.join(self._opera_home, BOOKMARKS_FILE)
-		self.monitor_token = self.monitor_directories(self._opera_home)
+		self._opera_dir = os.path.expanduser(__kupfer_settings__["profile_dir"])
+		self._bookmarks_path = os.path.join(self._opera_dir, BOOKMARKS_FILE)
+		self.monitor_token = self.monitor_directories(self._opera_dir)
 
 	def monitor_include_file(self, gfile):
 		return gfile and gfile.get_basename() == BOOKMARKS_FILE
