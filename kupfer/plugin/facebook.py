@@ -33,8 +33,18 @@ class AuthorizationOK (RunnableLeaf):
 	def run(self):
 		ContactsSource.authorize_finish()
 
+class OpenProfileURL (Action):
+	def __init__(self):
+		Action.__init__(self, _("Open"))
+	def activate(self, leaf):
+		utils.show_url(leaf.object["profile_url"])
+	def get_icon_name(self):
+		return "forward"
+
 class Contact (ContactLeaf):
-	pass
+	def get_actions(self):
+		yield OpenProfileURL()
+
 
 ToplevelGroupingSource = Source
 class ContactsSource (ToplevelGroupingSource):
