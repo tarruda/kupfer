@@ -10,7 +10,9 @@ from kupfer.obj.grouping import ToplevelGroupingSource
 
 __kupfer_name__ = _("Facebook")
 __kupfer_sources__ = ("ContactsSource", )
-#__kupfer_actions__ = ("NewMailAction", "SendFileByMail")
+__kupfer_actions__ = (
+	"UpdateStatus",
+)
 #__description__ = _("Claws Mail Contacts and Actions")
 __version__ = "2010-01-06"
 __author__ = "Ulrik Sverdrup <ulrik.sverdrup@gmail.com>"
@@ -23,15 +25,21 @@ S_KEY = ""
 
 class AuthorizeInFacebook (RunnableLeaf):
 	def __init__(self):
-		RunnableLeaf.__init__(self, name=_("Authorize in Facebook"))
+		RunnableLeaf.__init__(self, name=_("1. Authorize in Facebook"))
 	def run(self):
 		ContactsSource.authorize()
 
 class AuthorizationOK (RunnableLeaf):
 	def __init__(self):
-		RunnableLeaf.__init__(self, name=_("Authorization Finished"))
+		RunnableLeaf.__init__(self, name=_("2. Authorization Finished"))
 	def run(self):
 		ContactsSource.authorize_finish()
+
+class LogOut (RunnableLeaf):
+	def __init__(self):
+		RunnableLeaf.__init__(self, name=_("Log Out From Facebook"))
+	def run(self):
+		ContactsSource.logout()
 
 class OpenProfileURL (Action):
 	def __init__(self):
@@ -40,6 +48,20 @@ class OpenProfileURL (Action):
 		utils.show_url(leaf.object["profile_url"])
 	def get_icon_name(self):
 		return "forward"
+
+class UpdateStatus (Action):
+	def __init__(self):
+		Action.__init__(self, _("Update Status"))
+
+	def item_types(self):
+		yield TextLeaf
+
+	def activate(self, leaf):
+		text = leaf.object
+		ContactsSource.update_status(text)
+
+	def get_description(self):
+		return _("Update your facebook status")
 
 class Contact (ContactLeaf):
 	def get_actions(self):
@@ -77,6 +99,20 @@ class ContactsSource (ToplevelGroupingSource):
 		self._session_data = self.connection.auth.getSession()
 		self.mark_for_update()
 
+	@classmethod
+	def update_status(cls, text):
+		cls.shared_instance._update_status(text)
+
+	def _update_status(self, text):
+		try:
+			self.connection.users.setStatus(text, False)
+		except facebook.FacebookError, exc:
+			print exc, dir(exc)
+			print exc.code
+			# extended permission needed
+			if exc.code == 250:
+				self.connection.request_extended_permission("publish_stream")
+
 	def _new_connection(self):
 		connection = facebook.Facebook(API_KEY, S_KEY)
 		print "create token"
@@ -107,6 +143,8 @@ class ContactsSource (ToplevelGroupingSource):
 		for friend in friends:
 			yield Contact(friend, friend["name"])
 		
+	def should_sort_lexically(self):
+		return True
 
 	def get_description(self):
 		return None
