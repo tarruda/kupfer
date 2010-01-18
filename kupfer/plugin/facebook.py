@@ -13,14 +13,14 @@ __kupfer_sources__ = ("ContactsSource", )
 __kupfer_actions__ = (
 	"UpdateStatus",
 )
-#__description__ = _("Claws Mail Contacts and Actions")
+__description__ = ""
 __version__ = "2010-01-06"
 __author__ = "Ulrik Sverdrup <ulrik.sverdrup@gmail.com>"
 
 import facebook
 
-API_KEY = "832b734b048412cd714707e9f25c7029"
-S_KEY = ""
+API_KEY = ("832b734b048412cd714707e9f25c7029",
+           "dda4672a05eb3003fb5eab8a7b34cb42")
 
 
 class AuthorizeInFacebook (RunnableLeaf):
@@ -68,18 +68,16 @@ class Contact (ContactLeaf):
 		yield OpenProfileURL()
 
 
-ToplevelGroupingSource = Source
-class ContactsSource (ToplevelGroupingSource):
+class ContactsSource (Source):
 	shared_instance = None
 	def __init__(self, name=_("Facebook")):
-		ToplevelGroupingSource.__init__(self, _("Facebook")) #, "Contacts")
+		Source.__init__(self, _("Facebook"))
 		self._version = 2
 		self._session_data = {}
 
 	def initialize(self):
-		ToplevelGroupingSource.initialize(self)
 		ContactsSource.shared_instance = self
-		self.connection = facebook.Facebook(API_KEY, S_KEY)
+		self.connection = facebook.Facebook(*API_KEY)
 		if self._session_data:
 			self.connection.session_key = self._session_data["session_key"]
 			self.connection.secret = self._session_data["secret"]
@@ -87,8 +85,9 @@ class ContactsSource (ToplevelGroupingSource):
 	@classmethod
 	def authorize(cls):
 		cls.shared_instance._authorize()
+
 	def _authorize(self):
-		self.connection = facebook.Facebook(API_KEY, S_KEY)
+		self.connection = facebook.Facebook(*API_KEY)
 		self.connection.auth.createToken()
 		self.connection.login()
 
@@ -113,18 +112,8 @@ class ContactsSource (ToplevelGroupingSource):
 			if exc.code == 250:
 				self.connection.request_extended_permission("publish_stream")
 
-	def _new_connection(self):
-		connection = facebook.Facebook(API_KEY, S_KEY)
-		print "create token"
-		connection.auth.createToken()
-		connection.login()
-		return connection
-
 	def get_items(self):
 		print "GET ITEMS"
-		#connection = facebook.Facebook(API_KEY, S_KEY)
-		#self.connection.session_key = self._session_data["session_key"]
-		#self.connection.auth.createToken()
 		if not self._session_data:
 			yield AuthorizeInFacebook()
 			yield AuthorizationOK()
