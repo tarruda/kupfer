@@ -4,9 +4,10 @@ from kupfer.objects import Leaf, Action, Source
 from kupfer.objects import (TextLeaf, UrlLeaf, RunnableLeaf, FileLeaf,
 		AppLeafContentMixin )
 from kupfer import utils
-from kupfer.helplib import FilesystemWatchMixin
+from kupfer.helplib import FilesystemWatchMixin, PicklingHelperMixin
 from kupfer.obj.contacts import EMAIL_KEY, ContactLeaf
 from kupfer.obj.grouping import ToplevelGroupingSource
+from kupfer import task
 
 __kupfer_name__ = _("Facebook")
 __kupfer_sources__ = ("ContactsSource", )
@@ -22,6 +23,10 @@ import facebook
 API_KEY = ("832b734b048412cd714707e9f25c7029",
            "dda4672a05eb3003fb5eab8a7b34cb42")
 
+
+class DoNothingLeaf (Leaf):
+	def __init__(self, name):
+		Leaf.__init__(self, name, name)
 
 class AuthorizeInFacebook (RunnableLeaf):
 	def __init__(self):
@@ -68,14 +73,48 @@ class Contact (ContactLeaf):
 		yield OpenProfileURL()
 
 
-class ContactsSource (Source):
+class DownloadTask (task.ThreadTask):
+	def __init__(self, connection, owner):
+		task.ThreadTask.__init__(self)
+		self.connection = connection
+		self.owner = owner
+		self.fail = False
+		self.contacts = []
+
+	def thread_do(self):
+		try:
+			self.connection.users.getLoggedInUser()
+		except facebook.FacebookError, exc:
+			self.fail = exc
+			return
+		friend_ids = self.connection.friends.get()
+		print friend_ids
+		friends = self.connection.users.getInfo(friend_ids, fields=["pic_square", "profile_url", "name", "uid"])
+		print friends
+		self.contacts = [Contact(friend, friend["name"]) for friend in friends]
+
+	def thread_finish(self):
+		if self.fail:
+			self.owner.output_error("Error when downloading", self.fail)
+			self.owner._session_data = None
+			self.owner.mark_for_update()
+		else:
+			self.owner.contacts = self.contacts
+			self.owner.mark_for_update()
+
+class ContactsSource (Source, PicklingHelperMixin):
 	shared_instance = None
 	def __init__(self, name=_("Facebook")):
 		Source.__init__(self, _("Facebook"))
 		self._version = 2
 		self._session_data = {}
 
+	def pickle_prepare(self):
+		self.task_runner = None
+
 	def initialize(self):
+		self.task_runner = task.TaskRunner(True)
+		self.contacts = []
 		ContactsSource.shared_instance = self
 		self.connection = facebook.Facebook(*API_KEY)
 		if self._session_data:
@@ -94,6 +133,7 @@ class ContactsSource (Source):
 	@classmethod
 	def authorize_finish(cls):
 		cls.shared_instance._authorize_finish()
+
 	def _authorize_finish(self):
 		self._session_data = self.connection.auth.getSession()
 		self.mark_for_update()
@@ -117,20 +157,14 @@ class ContactsSource (Source):
 		if not self._session_data:
 			yield AuthorizeInFacebook()
 			yield AuthorizationOK()
+			self.contacts = []
 			return
-		try:
-			self.connection.users.getLoggedInUser()
-		except facebook.FacebookError, exc:
-			self.output_error(type(exc).__name__, exc)
-			self._session_data = None
-			self.mark_for_update()
-			return
-		friend_ids = self.connection.friends.get()
-		print friend_ids
-		friends = self.connection.users.getInfo(friend_ids, fields=["pic_square", "profile_url", "name", "uid"])
-		print friends
-		for friend in friends:
-			yield Contact(friend, friend["name"])
+		if self.contacts:
+			for C in self.contacts:
+				yield C
+		else:
+			self.task_runner.add_task(DownloadTask(self.connection, self))
+			yield DoNothingLeaf(_("Downloading Friend List"))
 		
 	def should_sort_lexically(self):
 		return True
