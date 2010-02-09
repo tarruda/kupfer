@@ -2,7 +2,10 @@
 from __future__ import with_statement
 
 __kupfer_name__ = _("Firefox Bookmarks")
-__kupfer_sources__ = ("BookmarksSource", )
+__kupfer_sources__ = (
+	"BookmarksSource",
+	"CurrentTabs",
+)
 __description__ = _("Index of Firefox bookmarks")
 __version__ = "2010-01-23"
 __author__ = "Ulrik, William Friesen, Karol Będkowski"
@@ -10,7 +13,10 @@ __author__ = "Ulrik, William Friesen, Karol Będkowski"
 from contextlib import closing
 import os
 import itertools
+import json
 import sqlite3
+
+import gio
 
 from kupfer.objects import Leaf, Action, Source
 from kupfer.objects import UrlLeaf
@@ -115,3 +121,34 @@ class BookmarksSource (AppLeafContentMixin, Source, FilesystemWatchMixin):
 		return "web-browser"
 	def provides(self):
 		yield UrlLeaf
+
+class CurrentTabs (Source):
+	def __init__(self):
+		Source.__init__(self, _("Current Tabs in Firefox"))
+
+	def initialize(self):
+		sess = firefox_support.get_firefox_home_file("sessionstore.js")
+		gfile = gio.File(sess)
+		self.monitor = gfile.monitor_file(gio.FILE_MONITOR_NONE, None)
+		self.monitor and self.monitor.connect("changed", self._changed)
+
+	def _changed(self, monitor, file1, file2, evt_type):
+		if evt_type in (gio.FILE_MONITOR_EVENT_CREATED,
+				gio.FILE_MONITOR_EVENT_DELETED,
+				gio.FILE_MONITOR_EVENT_CHANGED):
+			self.mark_for_update()
+
+	def get_items(self):
+		sess = firefox_support.get_firefox_home_file("sessionstore.js")
+		try:
+			dataobj = json.loads(open(sess).read().strip("()"))
+		except Exception, err:
+			self.output_error(err)
+			return
+		for tab in [tab for w in dataobj["windows"] for tab in w["tabs"]]:
+			last_entry = tab["entries"][-1]
+			yield UrlLeaf(last_entry["url"], last_entry["title"])
+
+	def provides(self):
+		yield UrlLeaf
+
