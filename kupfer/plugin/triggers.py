@@ -40,10 +40,22 @@ class Triggers (Source):
 		self.trigger_table = {}
 
 	def config_save(self):
+		self.rewrite_composed_leaves()
 		return {"triggers": self.trigger_table, "version": self.version}
 
 	def config_save_name(self):
 		return __name__
+
+	def rewrite_composed_leaves(self):
+		for target, (keystr, name, id_) in self.trigger_table.items():
+			obj = puid.resolve_unique_id(id_)
+			if obj is None:
+				self.output_info("Could not update", keystr, name)
+				continue
+			obj._content_source = None
+			new_id = puid.get_unique_id(obj)
+			self.trigger_table[target] = (keystr, name, new_id)
+			self.output_info("Updated", keystr, name)
 
 	def config_restore(self, state):
 		self.trigger_table = state["triggers"]
