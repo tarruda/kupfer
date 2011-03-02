@@ -170,6 +170,14 @@ def get_thumbnail_for_file(uri, width=-1, height=-1):
 
 	return get_pixbuf_from_file(thumb_path, width, height)
 
+def get_pixbuf_from_svgz(thumb_path, width=-1, height=-1):
+	try:
+		with open(thumb_path) as f:
+			return get_pixbuf_from_data(f.read(), width, height,
+			                            mimetype="image/svg+xml-compressed")
+	except EnvironmentError:
+		pretty.print_exc(__name__)
+
 def get_pixbuf_from_file(thumb_path, width=-1, height=-1):
 	"""
 	Return a Pixbuf thumbnail for the file at @thumb_path
@@ -184,6 +192,8 @@ def get_pixbuf_from_file(thumb_path, width=-1, height=-1):
 		icon = pixbuf_new_from_file_at_size(thumb_path, width, height)
 		return icon
 	except GError, e:
+		if thumb_path.endswith(".svgz") or thumb_path.endswith(".svg.gz"):
+			return get_pixbuf_from_svgz(thumb_path, width, height)
 		# this error is not important, the program continues on fine,
 		# so we put it in debug output.
 		pretty.print_debug(__name__, "get_pixbuf_from_file file:", thumb_path,
@@ -260,14 +270,10 @@ def get_icon_from_file(icon_file, icon_size):
 	# try to load from cache
 	for icon in get_icon(icon_file, icon_size):
 		return icon
-
-	try:
-		icon = pixbuf_new_from_file_at_size(icon_file, icon_size, icon_size)
+	icon = get_pixbuf_from_file(icon_file, icon_size, icon_size)
+	if icon:
 		store_icon(icon_file, icon_size, icon)
-		return icon
-	except GError, e:
-		print "get_icon_from_file, error:", e
-		return None
+	return icon
 
 def is_good(gicon):
 	"""Return True if it is likely that @gicon will load a visible icon
@@ -305,18 +311,27 @@ def get_gicon_for_names(*names):
 	return ThemedIcon(names)
 
 
-def get_pixbuf_from_data(data, width=None, height=None):
+def get_pixbuf_from_data(data, width=None, height=None, mimetype=None):
 	"""Create pixbuf object from data with optional scaling
 
 	@data: picture as raw data
 	@width, @heigh: optional destination size
+	@mimetype: if not None, tell the loader which type to use
 	"""
 	def set_size(img, img_width, img_height):
 		scale = min(width/float(img_width), height/float(img_height))
 		new_width, new_height = int(img_width*scale), int(img_height*scale)
 		img.set_size(new_width, new_height)
 
-	ploader = gtk.gdk.PixbufLoader()
+	if mimetype:
+		try:
+			ploader = gtk.gdk.pixbuf_loader_new_with_mime_type(mimetype)
+		except GError:
+			pretty.print_exc(__name__)
+			return None
+	else:
+		ploader = gtk.gdk.PixbufLoader()
+
 	if width and height:
 		ploader.connect("size-prepared", set_size)
 	ploader.write(data)
