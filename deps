@@ -1,0 +1,6 @@
+# required
+x11-toolkits/py-gtk
+devel/py-xdg
+devel/py-dbus
+# recommended
+x11/keybinder
