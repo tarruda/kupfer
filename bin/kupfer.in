@@ -33,7 +33,7 @@ OBJ="/interface"
 IFACE="se.kaizer.kupfer.Listener"
 
 # We allow reading directly from stdin if we pipe text into Kupfer
-if ! tty --quiet
+if ! tty -s
 then
 	echo "kupfer: Reading from stdin" >&2
 	TEXT_INPUT=$(cat)
